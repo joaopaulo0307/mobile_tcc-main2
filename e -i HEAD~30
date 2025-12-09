@@ -1,0 +1,48 @@
+[33me0be82f[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Modificação e ajustes das páginas
+[33m041fda9[m Modificação e ajustes das páginas
+[33m19d7de7[m Modificação e ajustes das páginas
+[33m61a51e5[m Modificação e ajustes das páginas
+[33m8f09a27[m Modificação e ajustes das páginas
+[33ma99c5e8[m Modificação e ajustes das páginas
+[33m00a64de[m Modificação e ajustes das páginas
+[33m07199e0[m Modificação e ajustes das páginas
+[33m47f68e3[m Estilização geral – refinamento visual e pequenos ajustes.
+[33md6fba68[m Página de membros – ajustes de navegação entre telas.
+[33md69acde[m Página Meu perfil - modificação no campo de imagem do usuário
+[33m244b075[m Página Meu perfil – modificação dos campos de textos 
+[33ma51a60a[m Página Meu Perfil – criação e integração com outras páginas.
+[33mf874cb2[m Troca de posição – reorganização das páginas “Home” e “Minhas Casas”.
+[33m139ea74[m Página Calendário – finalização e início da página “Minhas Casas”.
+[33md3b1dac[m Página Calendário – criação e linkagem com as demais páginas.
+[33m0d98074[m Página Histórico – exemplos fixos adicionados (campos de texto).
+[33m9fc5531[m Página Histórico – criação e linkagem com a página “Econômico”.
+[33m7557a68[m Página Econômico – finalização da estilização.
+[33m036f289[m Página Econômico – ajustes em comandos e visualização de valores.
+[33m879d93b[m Página Econômico – definição de pastas e estrutura dos gráficos.
+[33m035e1d1[m Página Econômico – desenvolvimento e ajustes visuais.
+[33m8fd92a3[m Página Econômico – organização de conversas entre telas (definição de links).
+[33mc8f3fc8[m Página Home – modificação para exibir links de outras telas (estilização).
+[33m100da0f[m Página de membros – criação do Drawer (menu lateral) e integração com as demais páginas.
+[33me449b99[m Página Home – modificação para exibir links de outras telas (estilização).
+[33m33335d2[m Página Econômico – organização de conversas entre telas (definição de links).
+[33m4255256[m Página Home – modificação para exibir links de outras telas (estilização).
+[33ma93782d[m criação das pastas para organização
+[33macaaefa[m Página de membros – criação do Drawer (menu lateral) e integração com as demais páginas.
+[33mfd026f3[m Página de membros – codificação e linkagem com a página “Home”.
+[33m85da72c[m Reestruturação geral – ajustes de layout e adaptação ao novo design (FIGMA).
+[33m9e5822d[m Página Home e páginas de membros – início da implementação e estrutura base.
+[33me7f656e[m Página Home – ajustes e integração das dependências.
+[33m9245f25[m Página Home – criação, finalização e autenticação (JWT em andamento).
+[33m2fd0a4d[m desenvolvimento
+[33m0ee3352[m home e login sem erros
+[33m9c0f5e3[m tela main 90% concluida
+[33m6d454e7[m desenvolvimento - modificação do código
+[33mcdc5819[m teste de página de login
+[33m787e10e[m Início do projeto – iniciando a codificação pela página Main
+[33ma3a5549[m criação das páginas
+[33md72af02[m git
+<<<<<<< HEAD
+[33m64f719b[m first commit
+=======
+[33m64f719b[m first commit
+>>>>>>> e4ff0b5eac39f41075aaceca3951c96eeb00bd10
