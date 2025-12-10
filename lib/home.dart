@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 // Serviços
 import './services/theme_service.dart';
 import './services/formatting_service.dart';
+import 'services/finance_service.dart';
 
 // Telas
 import './calendario/calendario.dart';
@@ -268,6 +269,8 @@ class _HomePageState extends State<HomePage> {
 
   // ✅ NOVA SEÇÃO: RESUMO FINANCEIRO
   Widget _buildResumoFinanceiro(BuildContext context, FormattingService formattingService) {
+    final financeService = Provider.of<FinanceService>(context);
+
     return Container(
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -300,15 +303,22 @@ class _HomePageState extends State<HomePage> {
               _buildInfoFinanceira(
                 context: context,
                 label: 'Saldo',
-                value: formattingService.formatCurrency(2500.75),
+                value: formattingService.formatCurrency(financeService.saldo),
                 icon: Icons.account_balance_wallet,
+                color: financeService.saldo >= 0 ? Colors.green : Colors.red,
+              ),
+              _buildInfoFinanceira(
+                context: context,
+                label: 'Renda',
+                value: formattingService.formatCurrency(financeService.renda),
+                icon: Icons.arrow_upward,
                 color: Colors.green,
               ),
               _buildInfoFinanceira(
                 context: context,
-                label: 'Despesas',
-                value: formattingService.formatCurrency(1250.30),
-                icon: Icons.money_off,
+                label: 'Gastos',
+                value: formattingService.formatCurrency(financeService.gastos),
+                icon: Icons.arrow_downward,
                 color: Colors.red,
               ),
             ],
@@ -317,6 +327,7 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
+
 
   Widget _buildInfoFinanceira({
     required BuildContext context,
