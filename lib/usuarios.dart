@@ -1,14 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+
 import '../services/theme_service.dart';
-import '../home.dart';
 import '../meu_casas.dart';
-import '../perfil.dart';
-import '../config.dart';
-import '../calendario/calendario.dart';
-import '../economic/economico.dart';
 
 class Usuarios extends StatefulWidget {
   const Usuarios({super.key});
@@ -19,595 +16,90 @@ class Usuarios extends StatefulWidget {
 
 class _UsuariosState extends State<Usuarios> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  final TextEditingController _searchController = TextEditingController();
-  final TextEditingController _nomeController = TextEditingController();
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   
-  String _searchQuery = '';
   List<Map<String, dynamic>> _membros = [];
+  String? _casaAtualId;
+  String? _casaAtualNome;
+  bool _isAdmin = false;
   bool _isLoading = true;
-  String? _currentHouseId;
-  String? _currentHouseName;
-  String? _houseOwnerId;
-  String? _currentUserId;
+  
+  final TextEditingController _emailController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _currentUserId = _auth.currentUser?.uid;
-    _loadCurrentHouse();
+    _carregarDados();
   }
 
-  // 🔥 VERIFICAR SE USUÁRIO ATUAL É O MESMO DO AUTH
-  bool _isValidUser() {
-    final currentAuthUser = _auth.currentUser;
-    if (currentAuthUser == null) return false;
-    return currentAuthUser.uid == _currentUserId;
-  }
+  Future<void> _carregarDados() async {
+    setState(() {
+      _isLoading = true;
+    });
 
-  // 🔥 CARREGAR CASA ATUAL
-  Future<void> _loadCurrentHouse() async {
     try {
-      if (!_isValidUser()) {
-        print('❌ USUÁRIO INVÁLIDO - Redirecionando...');
-        _logoutSilently();
-        return;
-      }
-
       final user = _auth.currentUser;
-      if (user == null) {
-        print('❌ Usuário não autenticado');
-        return;
-      }
-
-      print('🔍 Buscando casa do usuário: ${user.uid}');
-      print('📧 Email do usuário: ${user.email}');
-
-      // Buscar TODAS as casas onde o usuário é membro
-      final housesSnapshot = await _firestore
-          .collection('casas')
-          .where('membros.${user.uid}', isNotEqualTo: null)
-          .get();
-
-      print('🏠 Número de casas encontradas: ${housesSnapshot.docs.length}');
-
-      if (housesSnapshot.docs.isNotEmpty) {
-        // Pegar a primeira casa (poderia implementar seleção de casa depois)
-        final houseDoc = housesSnapshot.docs.first;
-        final houseData = houseDoc.data() as Map<String, dynamic>;
+      if (user != null) {
+        // Buscar casa atual do usuário
+        final userDoc = await _firestore.collection('usuarios').doc(user.uid).get();
+        final userData = userDoc.data();
         
-        print('✅ Casa selecionada: ${houseData['nome']}');
-        print('🔑 ID da casa: ${houseDoc.id}');
-        print('👑 Dono da casa: ${houseData['donoId']}');
-        
-        setState(() {
-          _currentHouseId = houseDoc.id;
-          _currentHouseName = houseData['nome'] ?? 'Minha Casa';
-          _houseOwnerId = houseData['donoId'];
-        });
-        
-        _loadMembros();
-      } else {
-        print('⚠️  Nenhuma casa encontrada para o usuário');
-        setState(() => _isLoading = false);
+        if (userData != null && userData['casaAtual'] != null) {
+          _casaAtualId = userData['casaAtual'];
+          
+          // Buscar informações da casa
+          final casaDoc = await _firestore.collection('casas').doc(_casaAtualId).get();
+          if (casaDoc.exists) {
+            final casaData = casaDoc.data()!;
+            _casaAtualNome = casaData['nome'];
+            _isAdmin = casaData['donoId'] == user.uid;
+            
+            // Buscar membros da casa
+            final membrosQuery = await _firestore
+                .collection('casas')
+                .doc(_casaAtualId)
+                .collection('membros')
+                .get();
+            
+            _membros.clear();
+            
+            for (var membroDoc in membrosQuery.docs) {
+              final membroData = membroDoc.data();
+              final usuarioDoc = await _firestore.collection('usuarios').doc(membroDoc.id).get();
+              final usuarioData = usuarioDoc.data();
+              
+              _membros.add({
+                'id': membroDoc.id,
+                'nome': usuarioData?['nome'] ?? 'Usuário',
+                'email': usuarioData?['email'] ?? membroData['email'],
+                'funcao': membroData['funcao'] ?? 'Membro',
+                'isAdmin': membroData['isAdmin'] ?? false,
+                'dataConvite': membroData['dataConvite']?.toDate(),
+                'aceitouConvite': membroData['aceitouConvite'] ?? false,
+              });
+            }
+            
+            // Ordenar: admin primeiro, depois por nome
+            _membros.sort((a, b) {
+              if (a['isAdmin'] && !b['isAdmin']) return -1;
+              if (!a['isAdmin'] && b['isAdmin']) return 1;
+              return a['nome'].compareTo(b['nome']);
+            });
+          }
+        }
       }
     } catch (e) {
-      print('❌ Erro ao carregar casa: $e');
-      setState(() => _isLoading = false);
+      print('Erro ao carregar dados: $e');
     }
-  }
 
-  // 🔥 LOGOUT SILENCIOSO
-  void _logoutSilently() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _auth.signOut();
-      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+    setState(() {
+      _isLoading = false;
     });
   }
 
-  // 🔥 CARREGAR MEMBROS DA CASA (SIMPLIFICADO)
-  Future<void> _loadMembros() async {
-    try {
-      if (_currentHouseId == null) {
-        setState(() => _isLoading = false);
-        return;
-      }
-
-      print('🔍 Carregando membros da casa: $_currentHouseId');
-
-      final houseDoc = await _firestore.collection('casas').doc(_currentHouseId!).get();
-      
-      if (!houseDoc.exists) {
-        print('❌ Casa não encontrada');
-        setState(() => _isLoading = false);
-        return;
-      }
-
-      final houseData = houseDoc.data() as Map<String, dynamic>;
-      
-      // Extrair membros
-      final membrosData = houseData['membros'] as Map<String, dynamic>? ?? {};
-      final List<Map<String, dynamic>> membrosList = [];
-      
-      print('👥 Número de membros na casa: ${membrosData.length}');
-
-      for (var entry in membrosData.entries) {
-        final userId = entry.key;
-        final memberData = entry.value as Map<String, dynamic>;
-        
-        try {
-          final userDoc = await _firestore.collection('usuarios').doc(userId).get();
-          
-          if (userDoc.exists) {
-            final userData = userDoc.data() as Map<String, dynamic>;
-            
-            membrosList.add({
-              'uid': userId,
-              'nome': userData['nome'] ?? userData['email']?.toString().split('@')[0] ?? 'Usuário',
-              'email': userData['email']?.toString() ?? '',
-              'cargo': (memberData['cargo'] as String?) ?? 'Membro',
-              'isOwner': userId == _houseOwnerId,
-              'dataEntrada': (memberData['dataEntrada'] as Timestamp?)?.toDate() ?? DateTime.now(),
-              'fotoUrl': userData['fotoUrl']?.toString(),
-            });
-            
-            print('✅ Membro carregado: ${userData['email']}');
-          }
-        } catch (e) {
-          print('⚠️  Erro ao carregar usuário $userId: $e');
-        }
-      }
-
-      // Ordenar membros
-      membrosList.sort((a, b) {
-        if (a['isOwner'] as bool) return -1;
-        if (b['isOwner'] as bool) return 1;
-        if (a['cargo'] == 'Administrador' && b['cargo'] != 'Administrador') return -1;
-        if (b['cargo'] == 'Administrador' && a['cargo'] != 'Administrador') return 1;
-        return (a['nome'] as String).compareTo(b['nome'] as String);
-      });
-
-      print('✅ Total de membros carregados: ${membrosList.length}');
-      
-      setState(() {
-        _membros = membrosList;
-        _isLoading = false;
-      });
-      
-    } catch (e) {
-      print('❌ Erro ao carregar membros: $e');
-      setState(() {
-        _membros = [];
-        _isLoading = false;
-      });
-    }
-  }
-
-  // ✅ ADICIONAR MEMBRO DIRETAMENTE (SEM CONVITE COMPLEXO)
-  Future<void> _adicionarMembroDireto(String email, String role, BuildContext context) async {
-    try {
-      print('=== ADICIONANDO MEMBRO DIRETAMENTE ===');
-      print('📧 Email: $email');
-      print('🎭 Cargo: $role');
-
-      // 🔴 VALIDAÇÃO: Usuário autenticado
-      final currentUser = _auth.currentUser;
-      if (currentUser == null) {
-        _mostrarErro('Usuário não autenticado');
-        return;
-      }
-
-      // 🔴 VALIDAÇÃO: Casa selecionada
-      if (_currentHouseId == null) {
-        _mostrarErro('Nenhuma casa selecionada');
-        return;
-      }
-
-      // Buscar usuário pelo email
-      final usersSnapshot = await _firestore
-          .collection('usuarios')
-          .where('email', isEqualTo: email)
-          .limit(1)
-          .get();
-
-      if (usersSnapshot.docs.isEmpty) {
-        _mostrarErro('Usuário não encontrado. Peça para ele se cadastrar no app primeiro.');
-        return;
-      }
-
-      final userDoc = usersSnapshot.docs.first;
-      final userId = userDoc.id;
-      final userData = userDoc.data() as Map<String, dynamic>;
-      
-      print('✅ Usuário encontrado: $userId');
-      print('📝 Nome: ${userData['nome']}');
-
-      // Verificar se já é membro
-      if (_membros.any((m) => m['uid'] == userId)) {
-        _mostrarErro('Este usuário já é membro desta casa');
-        return;
-      }
-
-      // 🔥 1. ADICIONAR À CASA
-      await _firestore.collection('casas').doc(_currentHouseId!).update({
-        'membros.$userId': {
-          'cargo': role,
-          'dataEntrada': FieldValue.serverTimestamp(),
-        }
-      });
-
-      // 🔥 2. ADICIONAR REFERÊNCIA DA CASA AO USUÁRIO
-      await _firestore.collection('usuarios').doc(userId).update({
-        'casas.$_currentHouseId': {
-          'nome': _currentHouseName ?? 'Minha Casa',
-          'cargo': role,
-          'dataEntrada': FieldValue.serverTimestamp(),
-        }
-      });
-
-      // 🔥 3. CRIAR NOTIFICAÇÃO PARA O USUÁRIO
-      await _firestore
-          .collection('usuarios')
-          .doc(userId)
-          .collection('notificacoes')
-          .add({
-            'titulo': 'Você foi adicionado a uma casa!',
-            'mensagem': '${currentUser.email?.split('@')[0] ?? currentUser.displayName} adicionou você à casa "$_currentHouseName"',
-            'tipo': 'nova_casa',
-            'casaId': _currentHouseId,
-            'casaNome': _currentHouseName,
-            'lida': false,
-            'data': FieldValue.serverTimestamp(),
-          });
-
-      print('✅ Membro adicionado com sucesso!');
-      
-      // Atualizar lista
-      _loadMembros();
-
-      if (context.mounted) {
-        Navigator.of(context).pop();
-        _mostrarSucesso('$email foi adicionado à casa como $role!');
-      }
-
-    } catch (e) {
-      print('❌ ERRO: $e');
-      _mostrarErro('Erro ao adicionar membro: ${e.toString()}');
-    }
-  }
-
-  // 🔥 MODAL PARA ADICIONAR MEMBRO
-  void _showAddMemberModal(BuildContext context) {
-    final emailController = TextEditingController();
-    String selectedRole = 'Membro';
-
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              title: const Text(
-                'Adicionar Membro',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: emailController,
-                      decoration: const InputDecoration(
-                        labelText: 'E-mail do usuário',
-                        hintText: 'usuario@email.com',
-                        prefixIcon: Icon(Icons.email),
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: TextInputType.emailAddress,
-                    ),
-                    const SizedBox(height: 16),
-                    if (_isCurrentUserAdmin)
-                      Column(
-                        children: [
-                          const Text(
-                            'Cargo:',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 8),
-                          DropdownButtonFormField<String>(
-                            value: selectedRole,
-                            items: ['Membro', 'Administrador']
-                                .map((role) => DropdownMenuItem(
-                                      value: role,
-                                      child: Text(role),
-                                    ))
-                                .toList(),
-                            onChanged: (value) => setState(() => selectedRole = value!),
-                            decoration: const InputDecoration(
-                              border: OutlineInputBorder(),
-                              filled: true,
-                              fillColor: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                        ],
-                      ),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.blue[50],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Column(
-                        children: [
-                          Icon(Icons.info, color: Colors.blue, size: 24),
-                          SizedBox(height: 8),
-                          Text(
-                            'O usuário precisa estar cadastrado no app com este email.',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.blue,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          SizedBox(height: 4),
-                          Text(
-                            'Ele receberá uma notificação e poderá acessar a casa imediatamente.',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.blue,
-                              fontStyle: FontStyle.italic,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancelar'),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    final email = emailController.text.trim();
-                    if (email.isEmpty) {
-                      _mostrarErro('Digite um e-mail válido');
-                      return;
-                    }
-
-                    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email)) {
-                      _mostrarErro('Digite um e-mail válido');
-                      return;
-                    }
-
-                    if (_membros.any((m) => m['email'] == email)) {
-                      _mostrarErro('Este usuário já é membro da casa');
-                      return;
-                    }
-
-                    // Mostrar loading
-                    showDialog(
-                      context: context,
-                      barrierDismissible: false,
-                      builder: (context) => const Center(
-                        child: CircularProgressIndicator(),
-                      ),
-                    );
-
-                    await _adicionarMembroDireto(email, selectedRole, context);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                  child: const Text('Adicionar'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  // 🔥 MODAL PARA CRIAR NOVA CASA
-  void _showCreateHouseModal(BuildContext context) {
-    final houseNameController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          title: const Text(
-            'Criar Nova Casa',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: houseNameController,
-                decoration: const InputDecoration(
-                  labelText: 'Nome da Casa',
-                  hintText: 'Ex: Minha Casa, Família Silva',
-                  prefixIcon: Icon(Icons.house),
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.blue[50],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Column(
-                  children: [
-                    Icon(Icons.info, color: Colors.blue, size: 20),
-                    SizedBox(height: 4),
-                    Text(
-                      'Você será o administrador desta casa',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.blue,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      'Pode adicionar membros depois nas configurações',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.blue,
-                        fontStyle: FontStyle.italic,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final houseName = houseNameController.text.trim();
-                if (houseName.isEmpty) {
-                  _mostrarErro('Digite um nome para a casa');
-                  return;
-                }
-
-                // Mostrar loading
-                showDialog(
-                  context: context,
-                  barrierDismissible: false,
-                  builder: (context) => const Center(
-                    child: CircularProgressIndicator(),
-                  ),
-                );
-
-                await _criarNovaCasa(houseName, context);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: const Text('Criar'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // 🔥 CRIAR NOVA CASA NO FIRESTORE
-  Future<void> _criarNovaCasa(String houseName, BuildContext context) async {
-    try {
-      final user = _auth.currentUser;
-      if (user == null) {
-        _mostrarErro('Usuário não autenticado');
-        return;
-      }
-
-      // Obter dados do usuário
-      final userDoc = await _firestore.collection('usuarios').doc(user.uid).get();
-      final userData = userDoc.data() as Map<String, dynamic>? ?? {};
-
-      // Criar documento da casa
-      final novaCasa = {
-        'nome': houseName,
-        'donoId': user.uid,
-        'donoEmail': user.email ?? '',
-        'donoNome': userData['nome'] ?? user.email?.split('@')[0] ?? 'Usuário',
-        'dataCriacao': FieldValue.serverTimestamp(),
-        'membros': {
-          user.uid: {
-            'cargo': 'Dono',
-            'dataEntrada': FieldValue.serverTimestamp(),
-          }
-        },
-        'totalMembros': 1,
-      };
-
-      final casaDocRef = await _firestore.collection('casas').add(novaCasa);
-      final casaId = casaDocRef.id;
-
-      // Atualizar usuário com a referência da casa
-      await _firestore.collection('usuarios').doc(user.uid).update({
-        'casas.$casaId': {
-          'nome': houseName,
-          'cargo': 'Dono',
-          'dataEntrada': FieldValue.serverTimestamp(),
-        }
-      });
-
-      print('✅ Casa criada com ID: $casaId');
-
-      // Fechar diálogos
-      if (context.mounted) {
-        Navigator.of(context).pop(); // Fechar loading
-        Navigator.of(context).pop(); // Fechar modal
-      }
-
-      // Navegar para a tela de casas
-      if (context.mounted) {
-        _navigateToHome(context);
-      }
-
-    } catch (e) {
-      print('❌ Erro ao criar casa: $e');
-      
-      if (context.mounted) {
-        Navigator.of(context).pop(); // Fechar loading
-        _mostrarErro('Erro ao criar casa: ${e.toString()}');
-      }
-    }
-  }
-
-  // 🔥 VERIFICAR SE USUÁRIO ATUAL É ADMINISTRADOR
-  bool get _isCurrentUserAdmin {
-    final currentUser = _auth.currentUser;
-    if (currentUser == null || _currentHouseId == null) return false;
-    
-    if (currentUser.uid == _houseOwnerId) return true;
-    
-    final currentMember = _membros.firstWhere(
-      (m) => m['uid'] == currentUser.uid,
-      orElse: () => <String, dynamic>{},
-    );
-    
-    return currentMember['cargo'] == 'Administrador';
-  }
-
-  // 🔥 VERIFICAR SE É DONO DA CASA
-  bool get _isCurrentUserOwner {
-    final currentUser = _auth.currentUser;
-    return currentUser?.uid == _houseOwnerId;
-  }
-
-  // ✅ FILTRAR MEMBROS POR PESQUISA
-  List<Map<String, dynamic>> get _filteredMembros {
-    if (_searchQuery.isEmpty) return _membros;
-    return _membros.where((membro) =>
-      membro['nome'].toString().toLowerCase().contains(_searchQuery.toLowerCase()) ||
-      membro['email'].toString().toLowerCase().contains(_searchQuery.toLowerCase()) ||
-      membro['cargo'].toString().toLowerCase().contains(_searchQuery.toLowerCase())
-    ).toList();
-  }
-
   // ==================== DRAWER ====================
-  Widget _buildDrawer(BuildContext context, ThemeService themeService) {
+  Widget _buildDrawer(BuildContext context) {
     final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
     final textColor = Theme.of(context).colorScheme.onSurface;
     final user = _auth.currentUser;
@@ -654,23 +146,6 @@ class _UsuariosState extends State<Usuarios> {
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
-                  if (_isCurrentUserOwner)
-                    Container(
-                      margin: const EdgeInsets.only(top: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Text(
-                        '⭐ Dono',
-                        style: TextStyle(
-                          color: Colors.red,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -680,51 +155,39 @@ class _UsuariosState extends State<Usuarios> {
             child: ListView(
               padding: EdgeInsets.zero,
               children: [
-                _buildDrawerItem(
-                  icon: Icons.attach_money,
-                  title: 'Econômico',
-                  textColor: textColor,
+                ListTile(
+                  leading: Icon(Icons.attach_money, color: textColor),
+                  title: Text('Econômico', style: TextStyle(color: textColor)),
                   onTap: () => _navigateToEconomico(context),
                 ),
-                _buildDrawerItem(
-                  icon: Icons.calendar_today,
-                  title: 'Calendário',
-                  textColor: textColor,
-                  onTap: () => _navigateTo(context, const CalendarPage()),
+                ListTile(
+                  leading: Icon(Icons.calendar_today, color: textColor),
+                  title: Text('Calendário', style: TextStyle(color: textColor)),
+                  onTap: () => _navigateToCalendario(context),
                 ),
-                _buildDrawerItem(
-                  icon: Icons.people,
-                  title: 'Usuários',
-                  textColor: textColor,
+                ListTile(
+                  leading: Icon(Icons.people, color: Colors.blue),
+                  title: const Text('Usuários', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                  trailing: const Icon(Icons.check, color: Colors.blue, size: 16),
                   onTap: () {
                     Navigator.pop(context);
                   },
-                  isSelected: true,
                 ),
                 Divider(color: Theme.of(context).dividerColor),
-                _buildDrawerItem(
-                  icon: Icons.house,
-                  title: 'Minhas Casas',
-                  textColor: textColor,
+                ListTile(
+                  leading: Icon(Icons.house, color: textColor),
+                  title: Text('Minhas Casas', style: TextStyle(color: textColor)),
                   onTap: () => _navigateToHome(context),
                 ),
-                _buildDrawerItem(
-                  icon: Icons.add_home,
-                  title: 'Criar Nova Casa',
-                  textColor: textColor,
-                  onTap: () => _showCreateHouseModal(context),
+                ListTile(
+                  leading: Icon(Icons.person, color: textColor),
+                  title: Text('Meu Perfil', style: TextStyle(color: textColor)),
+                  onTap: () => _navigateToPerfil(context),
                 ),
-                _buildDrawerItem(
-                  icon: Icons.person,
-                  title: 'Meu Perfil',
-                  textColor: textColor,
-                  onTap: () => _navigateTo(context, const PerfilPage()),
-                ),
-                _buildDrawerItem(
-                  icon: Icons.settings,
-                  title: 'Configurações',
-                  textColor: textColor,
-                  onTap: () => _navigateTo(context, const ConfigPage()),
+                ListTile(
+                  leading: Icon(Icons.settings, color: textColor),
+                  title: Text('Configurações', style: TextStyle(color: textColor)),
+                  onTap: () => _navigateToConfiguracoes(context),
                 ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -749,31 +212,766 @@ class _UsuariosState extends State<Usuarios> {
     );
   }
 
-  Widget _buildDrawerItem({
-    required IconData icon,
-    required String title,
-    required Color textColor,
-    required VoidCallback onTap,
-    bool isSelected = false,
-  }) {
-    return ListTile(
-      leading: Icon(
-        icon,
-        color: isSelected ? Colors.blue : textColor,
-      ),
-      title: Text(
-        title,
-        style: TextStyle(
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-          color: isSelected ? Colors.blue : textColor,
+  // ==================== APP BAR ====================
+  PreferredSizeWidget _buildAppBar(BuildContext context) {
+    return AppBar(
+      backgroundColor: Colors.white,
+      elevation: 1,
+      leading: Builder(
+        builder: (context) => IconButton(
+          icon: const Icon(Icons.menu, color: Colors.black),
+          onPressed: () => Scaffold.of(context).openDrawer(),
         ),
       ),
-      trailing: isSelected ? const Icon(Icons.check, color: Colors.blue, size: 16) : null,
-      onTap: onTap,
+      title: Text(
+        _casaAtualNome != null ? 'Membros - $_casaAtualNome' : 'Membros',
+        style: const TextStyle(
+          color: Colors.black,
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      centerTitle: false,
+      iconTheme: const IconThemeData(color: Colors.black),
+      actions: _isAdmin ? [
+        IconButton(
+          icon: const Icon(Icons.person_add, color: Colors.black),
+          onPressed: () => _mostrarDialogoConvite(context),
+          tooltip: 'Convidar membro',
+        ),
+        IconButton(
+          icon: const Icon(Icons.refresh, color: Colors.black),
+          onPressed: _carregarDados,
+          tooltip: 'Atualizar',
+        ),
+      ] : null,
     );
   }
 
-  // ==================== LOGOUT ====================
+  // ==================== BODY CONTENT ====================
+  Widget _buildContent(BuildContext context) {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    if (_casaAtualId == null) {
+      return _buildSemCasa();
+    }
+
+    return Container(
+      color: Colors.grey[50],
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '# Membros',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${_membros.length} membro${_membros.length != 1 ? 's' : ''} na casa',
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 14,
+                    ),
+                  ),
+                  if (_isAdmin) const SizedBox(height: 8),
+                  if (_isAdmin) Text(
+                    'Você é o administrador desta casa',
+                    style: TextStyle(
+                      color: Colors.blue[700],
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Lista de membros
+            if (_membros.isEmpty)
+              _buildSemMembros()
+            else
+              ..._membros.map((membro) => _buildMembroCard(membro)).toList(),
+
+            // Seção "Destinos" da imagem
+            Container(
+              margin: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 6,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '## Destinos',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildDestinoItem('Editor', Colors.blue),
+                  const SizedBox(height: 12),
+                  _buildDestinoItem('Escolar', Colors.green),
+                  if (_isAdmin) ...[
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.blue[50],
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.blue[100]!),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info, color: Colors.blue[700], size: 20),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Como administrador, você pode gerenciar funções e permissões dos membros.',
+                              style: TextStyle(
+                                color: Colors.blue[800],
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            // Footer
+            _buildFooter(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSemCasa() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.house_outlined,
+              size: 80,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              '## Nenhum membro na casa',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Você ainda não tem uma casa. Crie uma primeiro.',
+              style: TextStyle(
+                fontSize: 15,
+                color: Colors.grey,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () => _navigateToHome(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              icon: const Icon(Icons.add_home),
+              label: const Text('Criar Uma Casa Primeiro'),
+            ),
+            const SizedBox(height: 40),
+            _buildFooter(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSemMembros() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        children: [
+          Icon(
+            Icons.people_outline,
+            size: 60,
+            color: Colors.grey[400],
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Nenhum membro ainda',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Convide pessoas para participar da casa',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[600],
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 20),
+          if (_isAdmin)
+            ElevatedButton.icon(
+              onPressed: () => _mostrarDialogoConvite(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              icon: const Icon(Icons.person_add),
+              label: const Text('Convidar Primeiro Membro'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMembroCard(Map<String, dynamic> membro) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 6,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => _mostrarDetalhesMembro(membro),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                // Avatar
+                Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: membro['isAdmin'] ? Colors.blue[100] : Colors.grey[200],
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      membro['nome'].substring(0, 1).toUpperCase(),
+                      style: TextStyle(
+                        color: membro['isAdmin'] ? Colors.blue[800] : Colors.grey[700],
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(width: 16),
+                
+                // Informações
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            '## ${membro['nome']}',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          if (membro['isAdmin']) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.blue[50],
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: Colors.blue[100]!),
+                              ),
+                              child: Text(
+                                'Admin',
+                                style: TextStyle(
+                                  color: Colors.blue[800],
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        membro['funcao'],
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[700],
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        membro['email'],
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      if (!membro['aceitouConvite']) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(Icons.pending, size: 12, color: Colors.orange),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Convite pendente',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.orange[700],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                
+                // Botões de ação
+                if (_isAdmin && !membro['isAdmin'] && _auth.currentUser?.uid != membro['id'])
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert, color: Colors.grey),
+                    onSelected: (value) {
+                      if (value == 'remover') {
+                        _removerMembro(membro);
+                      } else if (value == 'promover') {
+                        _promoverParaAdmin(membro);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'promover',
+                        child: Row(
+                          children: [
+                            Icon(Icons.star, size: 18),
+                            SizedBox(width: 8),
+                            Text('Promover a Admin'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'remover',
+                        child: Row(
+                          children: [
+                            Icon(Icons.person_remove, size: 18, color: Colors.red),
+                            SizedBox(width: 8),
+                            Text('Remover da casa', style: TextStyle(color: Colors.red)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDestinoItem(String titulo, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            titulo == 'Editor' ? Icons.edit : Icons.school,
+            color: color,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              titulo,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: color,
+              ),
+            ),
+          ),
+          Icon(
+            Icons.arrow_forward_ios,
+            size: 14,
+            color: color.withOpacity(0.7),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFooter() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      color: Colors.white,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            "Organizar seus serviços de forma simples.",
+            style: TextStyle(
+              color: Colors.grey,
+              fontSize: 14,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            "© Todos os direitos reservados - 2025",
+            style: TextStyle(
+              color: Colors.grey,
+              fontSize: 12,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "TaskDomus v1.0.0",
+            style: TextStyle(
+              color: Colors.grey[400],
+              fontSize: 10,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==================== FUNÇÕES DE CONVITE ====================
+  void _mostrarDialogoConvite(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Convidar para a casa'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _emailController,
+              decoration: InputDecoration(
+                labelText: 'Email do convidado',
+                hintText: 'exemplo@gmail.com',
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.email),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.clear),
+                  onPressed: () => _emailController.clear(),
+                ),
+              ),
+              keyboardType: TextInputType.emailAddress,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              decoration: const InputDecoration(
+                labelText: 'Função (opcional)',
+                hintText: 'ex: Editor, Escolar, etc.',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.work),
+              ),
+              onChanged: (value) {
+                // Armazenar função temporariamente
+              },
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'O convidado receberá um email e a casa aparecerá na conta dele.',
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('CANCELAR'),
+          ),
+          ElevatedButton(
+            onPressed: () => _enviarConvite(context),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+            child: const Text('ENVIAR CONVITE'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _enviarConvite(BuildContext context) async {
+    final email = _emailController.text.trim();
+    
+    if (email.isEmpty) {
+      _mostrarMensagem('Digite um email válido');
+      return;
+    }
+
+    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email)) {
+      _mostrarMensagem('Email inválido');
+      return;
+    }
+
+    try {
+      // Verificar se usuário existe
+      final users = await _firestore
+          .collection('usuarios')
+          .where('email', isEqualTo: email)
+          .get();
+
+      String usuarioId;
+      
+      if (users.docs.isEmpty) {
+        // Criar usuário pendente
+        final novoUsuarioDoc = _firestore.collection('usuarios').doc();
+        usuarioId = novoUsuarioDoc.id;
+        
+        await novoUsuarioDoc.set({
+          'email': email,
+          'nome': email.split('@')[0],
+          'status': 'pendente',
+          'dataCriacao': DateTime.now(),
+        });
+      } else {
+        usuarioId = users.docs.first.id;
+      }
+
+      // Adicionar como membro pendente na casa
+      await _firestore
+          .collection('casas')
+          .doc(_casaAtualId)
+          .collection('membros')
+          .doc(usuarioId)
+          .set({
+            'email': email,
+            'isAdmin': false,
+            'aceitouConvite': false,
+            'dataConvite': DateTime.now(),
+            'funcao': 'Membro',
+            'convitePor': _auth.currentUser?.uid,
+          });
+
+      // Adicionar casa à lista de convites pendentes do usuário
+      await _firestore
+          .collection('usuarios')
+          .doc(usuarioId)
+          .collection('convitesPendentes')
+          .doc(_casaAtualId)
+          .set({
+            'casaNome': _casaAtualNome,
+            'casaId': _casaAtualId,
+            'dataConvite': DateTime.now(),
+            'convitePor': _auth.currentUser?.email,
+          });
+
+      Navigator.pop(context);
+      _emailController.clear();
+      
+      _mostrarSucesso('Convite enviado para $email');
+      _carregarDados();
+      
+    } catch (e) {
+      _mostrarErro('Erro ao enviar convite: $e');
+    }
+  }
+
+  Future<void> _removerMembro(Map<String, dynamic> membro) async {
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remover membro'),
+        content: Text('Tem certeza que deseja remover ${membro['nome']} da casa?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('CANCELAR'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('REMOVER'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmado == true) {
+      try {
+        await _firestore
+            .collection('casas')
+            .doc(_casaAtualId)
+            .collection('membros')
+            .doc(membro['id'])
+            .delete();
+
+        // Remover casa da lista do usuário removido
+        await _firestore
+            .collection('usuarios')
+            .doc(membro['id'])
+            .update({
+              'casas': FieldValue.arrayRemove([_casaAtualId])
+            });
+
+        _mostrarSucesso('${membro['nome']} removido da casa');
+        _carregarDados();
+      } catch (e) {
+        _mostrarErro('Erro ao remover membro: $e');
+      }
+    }
+  }
+
+  Future<void> _promoverParaAdmin(Map<String, dynamic> membro) async {
+    try {
+      await _firestore
+          .collection('casas')
+          .doc(_casaAtualId)
+          .collection('membros')
+          .doc(membro['id'])
+          .update({
+            'isAdmin': true,
+            'funcao': 'Administrador',
+          });
+
+      _mostrarSucesso('${membro['nome']} promovido a administrador');
+      _carregarDados();
+    } catch (e) {
+      _mostrarErro('Erro ao promover membro: $e');
+    }
+  }
+
+  void _mostrarDetalhesMembro(Map<String, dynamic> membro) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(membro['nome']),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Email: ${membro['email']}'),
+            const SizedBox(height: 8),
+            Text('Função: ${membro['funcao']}'),
+            const SizedBox(height: 8),
+            Text('Status: ${membro['aceitouConvite'] ? 'Membro ativo' : 'Convite pendente'}'),
+            if (membro['dataConvite'] != null) ...[
+              const SizedBox(height: 8),
+              Text('Convidado em: ${membro['dataConvite'].toString().split(' ')[0]}'),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('FECHAR'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==================== NAVEGAÇÃO ====================
+  void _navigateToHome(BuildContext context) {
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => const MeuCasas()),
+      (route) => false,
+    );
+  }
+
+  void _navigateToEconomico(BuildContext context) {
+    Navigator.pop(context);
+    // Navegar para Econômico
+  }
+
+  void _navigateToCalendario(BuildContext context) {
+    Navigator.pop(context);
+    // Navegar para Calendário
+  }
+
+  void _navigateToPerfil(BuildContext context) {
+    Navigator.pop(context);
+    // Navegar para Perfil
+  }
+
+  void _navigateToConfiguracoes(BuildContext context) {
+    Navigator.pop(context);
+    // Navegar para Configurações
+  }
+
   Future<void> _logout(BuildContext context) async {
     try {
       await _auth.signOut();
@@ -792,385 +990,6 @@ class _UsuariosState extends State<Usuarios> {
     }
   }
 
-  // ==================== APP BAR ====================
-  PreferredSizeWidget _buildAppBar(BuildContext context) {
-    return AppBar(
-      backgroundColor: const Color(0xFF2D2D2D),
-      leading: Builder(
-        builder: (context) => IconButton(
-          icon: const Icon(Icons.menu, color: Colors.white),
-          onPressed: () => Scaffold.of(context).openDrawer(),
-        ),
-      ),
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            _currentHouseName ?? 'Membros',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          Text(
-            _membros.isEmpty 
-              ? 'Nenhum membro'
-              : '${_membros.length} membro${_membros.length > 1 ? 's' : ''}',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.white.withOpacity(0.8),
-            ),
-          ),
-        ],
-      ),
-      centerTitle: false,
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.search, color: Colors.white),
-          onPressed: () => _showSearchDialog(context),
-        ),
-        IconButton(
-          icon: const Icon(Icons.refresh, color: Colors.white),
-          onPressed: _loadMembros,
-          tooltip: 'Atualizar',
-        ),
-        IconButton(
-          icon: const Icon(Icons.add_home, color: Colors.white),
-          onPressed: () => _showCreateHouseModal(context),
-          tooltip: 'Criar Nova Casa',
-        ),
-      ],
-    );
-  }
-
-  // ==================== BARRA DE PESQUISA ====================
-  void _showSearchDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Pesquisar Membros'),
-        content: TextField(
-          controller: _searchController,
-          decoration: const InputDecoration(
-            hintText: 'Digite nome ou e-mail...',
-            prefixIcon: Icon(Icons.search),
-            border: OutlineInputBorder(),
-          ),
-          onChanged: (value) {
-            setState(() {
-              _searchQuery = value;
-            });
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              setState(() {
-                _searchQuery = '';
-                _searchController.clear();
-              });
-              Navigator.pop(context);
-            },
-            child: const Text('Limpar'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Fechar'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ==================== LISTA DE MEMBROS ====================
-  Widget _buildListaMembros(BuildContext context) {
-    if (_isLoading) {
-      return const Expanded(
-        child: Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
-    }
-
-    return Expanded(
-      child: Container(
-        color: const Color(0xFF1E1E1E),
-        child: _filteredMembros.isEmpty
-            ? _buildEmptyState()
-            : Column(
-                children: [
-                  if (_searchQuery.isNotEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: Row(
-                        children: [
-                          Icon(Icons.search, size: 16, color: Colors.grey[400]),
-                          const SizedBox(width: 8),
-                          Text(
-                            '${_filteredMembros.length} resultado${_filteredMembros.length > 1 ? 's' : ''} encontrado${_filteredMembros.length > 1 ? 's' : ''}',
-                            style: TextStyle(
-                              color: Colors.grey[400],
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  Expanded(
-                    child: ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _filteredMembros.length,
-                      itemBuilder: (context, index) {
-                        final membro = _filteredMembros[index];
-                        final isCurrentUser = _auth.currentUser?.uid == membro['uid'];
-                        final role = membro['cargo'] as String? ?? 'Membro';
-                        final isOwner = membro['isOwner'] as bool;
-                        final roleColor = isOwner ? Colors.red : 
-                                         role == 'Administrador' ? Colors.orange : Colors.blue;
-
-                        return Card(
-                          elevation: 2,
-                          margin: const EdgeInsets.only(bottom: 12),
-                          color: const Color(0xFF2D2D2D),
-                          child: ListTile(
-                            leading: membro['fotoUrl'] != null
-                                ? CircleAvatar(
-                                    backgroundImage: NetworkImage(membro['fotoUrl'] as String),
-                                    radius: 20,
-                                  )
-                                : Container(
-                                    width: 40,
-                                    height: 40,
-                                    decoration: BoxDecoration(
-                                      color: roleColor.withOpacity(0.1),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(
-                                      isOwner 
-                                        ? Icons.star 
-                                        : role == 'Administrador' 
-                                          ? Icons.admin_panel_settings 
-                                          : Icons.person,
-                                      color: roleColor,
-                                      size: 20,
-                                    ),
-                                  ),
-                            title: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    membro['nome'] as String,
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: roleColor.withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    isOwner ? '⭐ Dono' : role,
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: roleColor,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  membro['email'] as String,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                if (isCurrentUser)
-                                  Container(
-                                    margin: const EdgeInsets.only(top: 4),
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.green.withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: const Text(
-                                      'Você',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: Colors.green,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            onTap: () => _showMemberDetailsModal(index, context),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Expanded(
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.people_outline,
-              size: 64,
-              color: Colors.grey[400],
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Nenhum membro na casa',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Adicione membros para sua casa',
-              style: TextStyle(
-                color: Colors.grey,
-                fontSize: 14,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: () => _showAddMemberModal(context),
-              icon: const Icon(Icons.add),
-              label: const Text('Adicionar Primeiro Membro'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ==================== BOTÕES DE AÇÃO ====================
-  Widget _buildBotoesAcao(BuildContext context) {
-    if (!_isCurrentUserAdmin && !_isCurrentUserOwner) {
-      return Container(); // Não mostra botão se não for admin/dono
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      color: const Color(0xFF1E1E1E),
-      child: Row(
-        children: [
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: () => _showAddMemberModal(context),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              icon: const Icon(Icons.add, color: Colors.white, size: 20),
-              label: const Text(
-                '+ Adicionar Membro',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ==================== DETALHES DO MEMBRO ====================
-  void _showMemberDetailsModal(int index, BuildContext context) {
-    final membro = _filteredMembros[index];
-    final isCurrentUser = _auth.currentUser?.uid == membro['uid'];
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(membro['nome'] as String),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (membro['fotoUrl'] != null)
-                Center(
-                  child: CircleAvatar(
-                    radius: 40,
-                    backgroundImage: NetworkImage(membro['fotoUrl'] as String),
-                  ),
-                ),
-              const SizedBox(height: 16),
-              _buildDetailItem('E-mail', membro['email'] as String?),
-              _buildDetailItem('Cargo', membro['cargo'] as String?),
-              _buildDetailItem('Entrou em', 
-                membro['dataEntrada'] is DateTime 
-                  ? '${(membro['dataEntrada'] as DateTime).day}/${(membro['dataEntrada'] as DateTime).month}/${(membro['dataEntrada'] as DateTime).year}'
-                  : 'Data não disponível'
-              ),
-              if (membro['isOwner'] as bool)
-                Container(
-                  margin: const EdgeInsets.only(top: 8),
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.star, color: Colors.red, size: 16),
-                      SizedBox(width: 8),
-                      Text('⭐ Dono da Casa', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Fechar'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDetailItem(String label, String? value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('$label: ', style: const TextStyle(fontWeight: FontWeight.bold)),
-          Expanded(child: Text(value ?? 'Não informado')),
-        ],
-      ),
-    );
-  }
-
   // ==================== MENSAGENS ====================
   void _mostrarSucesso(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -1183,121 +1002,33 @@ class _UsuariosState extends State<Usuarios> {
   }
 
   void _mostrarErro(String message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Erro'),
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
         content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 3),
       ),
     );
   }
 
-  // ==================== FOOTER ====================
-  Widget _buildFooter(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      color: const Color(0xFF2D2D2D),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            _currentHouseName ?? 'Organize suas tarefas de forma simples',
-            style: const TextStyle(color: Colors.white, fontSize: 14),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            "© Todos os direitos reservados - 2025",
-            style: TextStyle(color: Colors.white70, fontSize: 12),
-            textAlign: TextAlign.center,
-          ),
-        ],
+  void _mostrarMensagem(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 2),
       ),
     );
-  }
-
-  // ==================== MÉTODOS DE NAVEGAÇÃO ====================
-  void _navigateTo(BuildContext context, Widget page) {
-    Navigator.pop(context);
-    Navigator.push(context, MaterialPageRoute(builder: (context) => page));
-  }
-
-  void _navigateToEconomico(BuildContext context) {
-    Navigator.pop(context);
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => Economico(
-          casa: {
-            'nome': _currentHouseName ?? 'Casa Atual',
-            'id': _currentHouseId ?? '1',
-          },
-        ),
-      ),
-    );
-  }
-
-  void _navigateToHome(BuildContext context) {
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (context) => const MeuCasas()),
-      (route) => false,
-    );
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    _nomeController.dispose();
-    super.dispose();
   }
 
   // ==================== BUILD PRINCIPAL ====================
   @override
   Widget build(BuildContext context) {
-    // Verificar se usuário é válido
-    if (!_isValidUser()) {
-      return Scaffold(
-        backgroundColor: const Color(0xFF1E1E1E),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 20),
-              Text(
-                'Verificando autenticação...',
-                style: TextStyle(color: Colors.grey[400]),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Consumer<ThemeService>(
-      builder: (context, themeService, child) {
-        return Scaffold(
-          key: _scaffoldKey,
-          backgroundColor: const Color(0xFF1E1E1E),
-          appBar: _buildAppBar(context),
-          drawer: _buildDrawer(context, themeService),
-          body: Column(
-            children: [
-              _buildListaMembros(context),
-              _buildBotoesAcao(context),
-              _buildFooter(context),
-            ],
-          ),
-        );
-      },
+    return Scaffold(
+      key: _scaffoldKey,
+      backgroundColor: Colors.grey[50],
+      appBar: _buildAppBar(context),
+      drawer: _buildDrawer(context),
+      body: _buildContent(context),
     );
   }
 }

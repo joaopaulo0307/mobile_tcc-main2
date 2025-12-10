@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // ✅ Adicionado para Firebase Auth
+import 'package:firebase_auth/firebase_auth.dart'; 
 
 // Serviços
 import './services/theme_service.dart';
@@ -14,6 +14,7 @@ import './perfil.dart';
 import './usuarios.dart';
 import './config.dart';
 import 'main.dart';
+import './lista_compras.dart';
 
 class HomePage extends StatefulWidget {
   final Map<String, String> casa;
@@ -26,7 +27,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  final FirebaseAuth _auth = FirebaseAuth.instance; // ✅ Instância do Firebase Auth
+  final FirebaseAuth _auth = FirebaseAuth.instance; 
   String _userName = "Usuário";
 
   @override
@@ -173,6 +174,12 @@ class _HomePageState extends State<HomePage> {
                   title: 'Usuários',
                   textColor: textColor,
                   onTap: () => _navigateTo(context, const Usuarios()),
+                ),
+                _buildDrawerItem(
+                  icon: Icons.people,
+                  title: 'Lista de compras',
+                  textColor: textColor,
+                  onTap: () => _navigateTo(context, const ListaCompras()),
                 ),
                 Divider(color: Theme.of(context).dividerColor),
                 _buildDrawerItem(
