@@ -171,7 +171,7 @@ class _HomePageState extends State<HomePage> {
                   onTap: () => _navigateTo(context, const Usuarios()),
                 ),
                 _buildDrawerItem(
-                  icon: Icons.people,
+                  icon: Icons.shopping_cart,
                   title: 'Lista de compras',
                   textColor: textColor,
                   onTap: () => _navigateTo(context, const ListaCompras()),

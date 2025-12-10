@@ -12,7 +12,7 @@ import '../perfil.dart';
 import '../usuarios.dart';
 import '../config.dart';
 import '../main.dart';
-import '../lista_compras.dart'; // Adicione esta linha
+import '../lista_compras.dart'; 
 
 class HistoricoPage extends StatefulWidget {
   final List<Transacao> transacoes;
@@ -25,7 +25,7 @@ class HistoricoPage extends StatefulWidget {
 
 class _HistoricoPageState extends State<HistoricoPage> {
   int selecionado = 7;
-  final FirebaseAuth _auth = FirebaseAuth.instance; // Adicione esta linha
+  final FirebaseAuth _auth = FirebaseAuth.instance; 
 
   // Agrupar transações por data
   Map<String, List<Transacao>> get _transacoesAgrupadas {
@@ -291,6 +291,15 @@ class _HistoricoPageState extends State<HistoricoPage> {
             child: ListView(
               padding: EdgeInsets.zero,
               children: [
+                _buildDrawerItem(
+                  icon: Icons.home, 
+                  title: 'Home', 
+                  textColor: textColor,  
+                  onTap: () {
+                    Navigator.pop(context);
+                    _navigateToHome(context);
+                  },
+                ),
                 _buildDrawerItem(
                   icon: Icons.attach_money,
                   title: 'Econômico',

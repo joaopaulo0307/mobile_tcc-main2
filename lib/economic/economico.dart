@@ -1,4 +1,3 @@
-// lib/economic/economico.dart
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:provider/provider.dart';
@@ -10,6 +9,8 @@ import 'package:mobile_tcc/meu_casas.dart';
 import 'package:mobile_tcc/economic/historico.dart';
 import 'package:mobile_tcc/services/theme_service.dart';
 import 'package:mobile_tcc/models/transacao.dart';
+import '../lista_compras.dart';
+import '../calendario/calendario.dart';
 
 class Economico extends StatefulWidget {
   final Map<String, String> casa;
@@ -163,15 +164,22 @@ class _EconomicoState extends State<Economico> {
                   onTap: () => _navigateToHome(context)
                 ),
                 _buildDrawerItem(
-                  icon: Icons.history, 
-                  title: 'Histórico', 
+                  icon: Icons.calendar_month, 
+                  title: 'Calendário', 
                   textColor: textColor, 
                   primaryColor: primaryColor, 
-                  onTap: () => _navigateToHistorico(context)
+                  onTap: () => _navigateToCalendario(context)
                 ),
                 _buildDrawerItem(
                   icon: Icons.people, 
                   title: 'Usuários', 
+                  textColor: textColor, 
+                  primaryColor: primaryColor, 
+                  onTap: () => _navigateToUsuarios(context)
+                ),
+                _buildDrawerItem(
+                  icon: Icons.shopping_cart, 
+                  title: 'Lista de compras', 
                   textColor: textColor, 
                   primaryColor: primaryColor, 
                   onTap: () => _navigateToUsuarios(context)
@@ -254,10 +262,16 @@ class _EconomicoState extends State<Economico> {
     Navigator.push(context, MaterialPageRoute(builder: (context) => HomePage(casa: widget.casa)));
   }
 
-  void _navigateToHistorico(BuildContext context) {
+  void _navigateToEconomico(BuildContext context) {
     Navigator.pop(context);
-    Navigator.push(context, MaterialPageRoute(builder: (context) => HistoricoPage(transacoes: historicoTransacoes)));
+    Navigator.push(context, MaterialPageRoute(builder: (context) => Economico(casa: widget.casa )));
   }
+
+  void _navigateToCalendario(context) {
+    Navigator.pop(context);
+    Navigator.push(context, MaterialPageRoute(builder: (context) => const CalendarPage()));
+  }
+
 
   void _navigateToUsuarios(BuildContext context) {
     Navigator.pop(context);
@@ -373,7 +387,7 @@ class _EconomicoState extends State<Economico> {
                 const Text('Histórico Recente', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 const Spacer(),
                 TextButton(
-                  onPressed: () => _navigateToHistorico(context), 
+                  onPressed: () => _navigateToEconomico(context), 
                   child: const Text('Ver tudo')
                 ),
               ]

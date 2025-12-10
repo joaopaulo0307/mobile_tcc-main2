@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
+import 'package:mobile_tcc/calendario/calendario.dart';
+import 'package:mobile_tcc/config.dart';
+import 'package:mobile_tcc/lista_compras.dart';
+import 'package:mobile_tcc/perfil.dart';
 import 'package:provider/provider.dart';
 
 import '../services/theme_service.dart';
@@ -157,6 +161,11 @@ class _UsuariosState extends State<Usuarios> {
               children: [
                 ListTile(
                   leading: Icon(Icons.attach_money, color: textColor),
+                  title: Text('Home', style: TextStyle(color: textColor)),
+                  onTap: () => _navigateToHome(context),
+                ),
+                ListTile(
+                  leading: Icon(Icons.attach_money, color: textColor),
                   title: Text('Econômico', style: TextStyle(color: textColor)),
                   onTap: () => _navigateToEconomico(context),
                 ),
@@ -169,15 +178,19 @@ class _UsuariosState extends State<Usuarios> {
                   leading: Icon(Icons.people, color: Colors.blue),
                   title: const Text('Usuários', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
                   trailing: const Icon(Icons.check, color: Colors.blue, size: 16),
-                  onTap: () {
-                    Navigator.pop(context);
-                  },
+                  onTap: () => _navigateToUsuarios(context),
+                ),
+                ListTile(
+                  leading: Icon(Icons.shopping_cart, color: Colors.blue),
+                  title: const Text('Lista de Compras', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                  trailing: const Icon(Icons.check, color: Colors.blue, size: 16),
+                  onTap: () => _navigateToListaCompras(context),
                 ),
                 Divider(color: Theme.of(context).dividerColor),
                 ListTile(
                   leading: Icon(Icons.house, color: textColor),
                   title: Text('Minhas Casas', style: TextStyle(color: textColor)),
-                  onTap: () => _navigateToHome(context),
+                  onTap: () => _navigateToMinhasCasas(context),
                 ),
                 ListTile(
                   leading: Icon(Icons.person, color: textColor),
@@ -944,12 +957,17 @@ class _UsuariosState extends State<Usuarios> {
   }
 
   // ==================== NAVEGAÇÃO ====================
-  void _navigateToHome(BuildContext context) {
+  void _navigateToMinhasCasas(context) {
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (context) => const MeuCasas()),
       (route) => false,
     );
+  }
+
+  void _navigateToHome(BuildContext context) {
+    Navigator.pop(context);
+    // Navegar para Home
   }
 
   void _navigateToEconomico(BuildContext context) {
@@ -958,17 +976,47 @@ class _UsuariosState extends State<Usuarios> {
   }
 
   void _navigateToCalendario(BuildContext context) {
-    Navigator.pop(context);
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => const CalendarPage()),
+      (route) => false,
+    );
     // Navegar para Calendário
   }
 
+  void _navigateToUsuarios(BuildContext context) {
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => const Usuarios()),
+      (route) => false,
+    );
+    // Navegar para Usuários
+  }
+
+  void _navigateToListaCompras(BuildContext context) {
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => const ListaCompras()),
+      (route) => false,
+    );
+    // Navegar para Lista de Compras
+  }
+
   void _navigateToPerfil(BuildContext context) {
-    Navigator.pop(context);
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => const PerfilPage()),
+      (route) => false,
+    );
     // Navegar para Perfil
   }
 
   void _navigateToConfiguracoes(BuildContext context) {
-    Navigator.pop(context);
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => const ConfigPage()),
+      (route) => false,
+    );
     // Navegar para Configurações
   }
 
