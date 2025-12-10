@@ -270,6 +270,12 @@ class _ListaComprasState extends State<ListaCompras> {
                   textColor: textColor,
                   onTap: () => _navigateTo(context, const Usuarios()),
                 ),
+                _buildDrawerItem(
+                  icon: Icons.people,
+                  title: 'Lista de compras',
+                  textColor: textColor,
+                  onTap: () => _navigateTo(context, const ListaCompras()),
+                ),
                 Divider(color: Theme.of(context).dividerColor),
                 _buildDrawerItem(
                   icon: Icons.house,

@@ -18,6 +18,7 @@ import 'package:firebase_database/firebase_database.dart';
 import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:io' as io;
+import 'services/finance_service.dart';
 
 // ✅ SERViÇO DE USUÁRIO ADICIONADO
 class UserService {
@@ -68,6 +69,7 @@ void main() async {
       providers: [
         ChangeNotifierProvider(create: (context) => ThemeService()),
         Provider(create: (context) => FormattingService()),
+        ChangeNotifierProvider(create: (context) => FinanceService()),
         StreamProvider<User?>( // ✅ PROVIDER PARA USUÁRIO FIREBASE
           create: (context) => FirebaseAuth.instance.authStateChanges(),
           initialData: null,

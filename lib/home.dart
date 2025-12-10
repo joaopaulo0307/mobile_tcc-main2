@@ -48,24 +48,18 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ThemeService>(
-      builder: (context, themeService, child) {
-        return MaterialApp(
-          theme: themeService.themeData,
-          home: Scaffold(
-            key: _scaffoldKey,
-            appBar: _buildAppBar(context, themeService),
-            drawer: _buildDrawer(context, themeService),
-            body: _buildBody(context, themeService),
-          ),
-        );
-      },
+    // Obter o ThemeService do contexto atual
+    final themeService = Provider.of<ThemeService>(context);
+    
+    return Scaffold(
+      key: _scaffoldKey,
+      appBar: _buildAppBar(context),
+      drawer: _buildDrawer(context),
+      body: _buildBody(context),
     );
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context, ThemeService themeService) {
-    final formattingService = Provider.of<FormattingService>(context, listen: false);
-
+  PreferredSizeWidget _buildAppBar(BuildContext context) {
     return AppBar(
       leading: IconButton(
         icon: const Icon(Icons.menu),
@@ -101,7 +95,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildDrawer(BuildContext context, ThemeService themeService) {
+  Widget _buildDrawer(BuildContext context) {
     final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
     final textColor = Theme.of(context).colorScheme.onSurface;
     final user = _auth.currentUser;
@@ -249,85 +243,86 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildBody(BuildContext context, ThemeService themeService) {
-    return Consumer<FormattingService>(
-      builder: (context, formattingService, child) {
-        return Container(
-          color: Theme.of(context).scaffoldBackgroundColor,
-          child: Column(
-            children: [
-              _buildListaTarefas(context),
-              _buildResumoFinanceiro(context, formattingService),
-              _buildSecaoOpcoes(context),
-              _buildFooter(context, formattingService),
-            ],
-          ),
-        );
-      },
+  Widget _buildBody(BuildContext context) {
+    return Container(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      child: Column(
+        children: [
+          _buildListaTarefas(context),
+          _buildResumoFinanceiro(context),
+          _buildSecaoOpcoes(context),
+          _buildFooter(context),
+        ],
+      ),
     );
   }
 
   // ✅ NOVA SEÇÃO: RESUMO FINANCEIRO
-  Widget _buildResumoFinanceiro(BuildContext context, FormattingService formattingService) {
-    final financeService = Provider.of<FinanceService>(context);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 6,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Resumo Financeiro',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).colorScheme.onSurface,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildInfoFinanceira(
-                context: context,
-                label: 'Saldo',
-                value: formattingService.formatCurrency(financeService.saldo),
-                icon: Icons.account_balance_wallet,
-                color: financeService.saldo >= 0 ? Colors.green : Colors.red,
+  Widget _buildResumoFinanceiro(BuildContext context) {
+    return Consumer<FinanceService>(
+      builder: (context, financeService, child) {
+        return Consumer<FormattingService>(
+          builder: (context, formattingService, child) {
+            return Container(
+              padding: const EdgeInsets.all(16),
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 6,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
               ),
-              _buildInfoFinanceira(
-                context: context,
-                label: 'Renda',
-                value: formattingService.formatCurrency(financeService.renda),
-                icon: Icons.arrow_upward,
-                color: Colors.green,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Resumo Financeiro',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildInfoFinanceira(
+                        context: context,
+                        label: 'Saldo',
+                        value: formattingService.formatCurrency(financeService.saldo),
+                        icon: Icons.account_balance_wallet,
+                        color: financeService.saldo >= 0 ? Colors.green : Colors.red,
+                      ),
+                      _buildInfoFinanceira(
+                        context: context,
+                        label: 'Renda',
+                        value: formattingService.formatCurrency(financeService.renda),
+                        icon: Icons.arrow_upward,
+                        color: Colors.green,
+                      ),
+                      _buildInfoFinanceira(
+                        context: context,
+                        label: 'Gastos',
+                        value: formattingService.formatCurrency(financeService.gastos),
+                        icon: Icons.arrow_downward,
+                        color: Colors.red,
+                      ),
+                    ],
+                  ),
+                ],
               ),
-              _buildInfoFinanceira(
-                context: context,
-                label: 'Gastos',
-                value: formattingService.formatCurrency(financeService.gastos),
-                icon: Icons.arrow_downward,
-                color: Colors.red,
-              ),
-            ],
-          ),
-        ],
-      ),
+            );
+          },
+        );
+      },
     );
   }
-
 
   Widget _buildInfoFinanceira({
     required BuildContext context,
@@ -474,7 +469,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildFooter(BuildContext context, FormattingService formattingService) {
+  Widget _buildFooter(BuildContext context) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -632,11 +627,5 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
     );
-  }
-
-  // ✅ MÉTODO ATUALIZADO USANDO FORMATTING SERVICE
-  String _getCurrentDate(BuildContext context) {
-    final formattingService = Provider.of<FormattingService>(context, listen: false);
-    return formattingService.formatDate(DateTime.now());
   }
 }

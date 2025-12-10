@@ -8,6 +8,7 @@ import '../usuarios.dart';
 import '../perfil.dart';
 import '../calendario/calendario.dart';
 import '../economic/economico.dart';
+import './lista_compras.dart';
 
 class ConfigPage extends StatefulWidget {
   const ConfigPage({super.key});
@@ -110,6 +111,12 @@ class _ConfigPageState extends State<ConfigPage> {
                   title: 'Usuários',
                   textColor: textColor,
                   onTap: () => _navigateTo(context, const Usuarios()),
+                ),
+                _buildDrawerItem(
+                  icon: Icons.people,
+                  title: 'Lista de compras',
+                  textColor: textColor,
+                  onTap: () => _navigateTo(context, const ListaCompras()),
                 ),
                 Divider(color: Theme.of(context).dividerColor),
                 _buildDrawerItem(
